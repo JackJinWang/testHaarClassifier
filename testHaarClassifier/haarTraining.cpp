@@ -9,6 +9,7 @@ using namespace tinyxml2;
 #include"myIntergal.h"
 #include"delete.h"
 #include"classifier.h"
+#include <time.h>
 using namespace std;
 /*
 *
@@ -567,8 +568,9 @@ int icvInitPostiveReaders(const char* filename, MySize winsize)
 	return (cvposdata != NULL);
 }
 
-static void getPicture(CvHaarTrainingData* training_data,int *number_all,int number,int flag,MySize mysize)
+static void getPicture(CvHaarTrainingData* training_data, int *number_all, int number, int flag, MySize mysize)
 {
+	ofstream filePic;
 	switch (flag)
 	{
 	case NEG_FLAG:
@@ -582,6 +584,9 @@ static void getPicture(CvHaarTrainingData* training_data,int *number_all,int num
 
 			int temp = number_all[i];
 			tempMat = transMat(tempMat, cvbgdata->filename[temp]);
+			filePic.open("E://pic.txt", ios::app);
+			filePic <<trainingdata_number<<","<< cvbgdata->filename[temp] << endl;
+			filePic.close();
 			if (tempMat != nullptr)
 			{
 				//计算积分图
@@ -614,6 +619,9 @@ static void getPicture(CvHaarTrainingData* training_data,int *number_all,int num
 			
 			int temp = number_all[i];
 			tempMat = transMat(tempMat, cvposdata->filename[temp]);
+			filePic.open("E://pic.txt", ios::app);
+			filePic << trainingdata_number << "," << cvposdata->filename[temp] << endl;
+			filePic.close();
 			if (tempMat != nullptr)
 			{
 				//计算积分图
@@ -630,6 +638,7 @@ static void getPicture(CvHaarTrainingData* training_data,int *number_all,int num
 		}
 		releaseMyMat(tempMat);
 		releaseMyMat(tempSum);
+		filePic.close();
 	//	releaseMyMat(tempTitle);
 	//	releaseMyMat(tempSqsum);
 		break;
@@ -802,7 +811,7 @@ int* predict(int* preResult, int pictureNum, CvIntHaarFeatures* haarFeatures, Cv
 	/*
 	*对图片进行预测分类
 	*/
-
+	sum = sum * 0.5;
 	for (int i = 0;i < pictureNum;i++)
 	{
 		float val = 0.0f;
@@ -811,19 +820,40 @@ int* predict(int* preResult, int pictureNum, CvIntHaarFeatures* haarFeatures, Cv
 		{
 			int featureNum = strongClassifier[j].compidx;
 			val = cvEvalFastHaarFeature(haarFeatures->fastfeature + featureNum, haarTrainingData->sum.data.i + i * haarTrainingData->sum.width, haarTrainingData->sum.data.i);
-			if ((val < strongClassifier[j].threshold) && (haarTrainingData->cls.data.fl[i] == strongClassifier[j].left))
+		//	if ((strongClassifier[j].left == 1)&&(val < strongClassifier[j].threshold) && (haarTrainingData->cls.data.fl[i] == strongClassifier[j].left))
+			if ((strongClassifier[j].left == 1) && (val < strongClassifier[j].threshold))
 			{
 				predictSum = predictSum + at[j];
+				/*
+				if (strongClassifier[j].left == 1)
+					cout << "i:" << i << ",j:" << j << ",face" << endl;
+				else
+					cout << "i:" << i << ",j:" << j << ",non-face" << endl;
+					*/
+
 			}
-			else if ((val > strongClassifier[j].threshold) && (haarTrainingData->cls.data.fl[i] == strongClassifier[j].right))
+			//else if ((strongClassifier[j].right == 1) && (val > strongClassifier[j].threshold) && (haarTrainingData->cls.data.fl[i] == strongClassifier[j].right))
+			else if ((strongClassifier[j].right == 1) && (val > strongClassifier[j].threshold))
 			{
 				predictSum = predictSum + at[j];
+				/*
+				if (strongClassifier[j].left == 1)
+					cout << "i:" << i << ",j:" << j << ",face" << endl;
+				else
+					cout << "i:" << i << ",j:" << j << ",non-face" << endl;
+					*/
 			}
 		}
 		if (predictSum >= sum)
+		{
 			preResult[i] = 1;
+		//	cout << "最终face" << endl;
+	    }
 		else
+		{
 			preResult[i] = 0;
+		//	cout << "最终non-face" << endl;
+		}
 	}
 	delete[]at;
 	return preResult;
@@ -959,12 +989,15 @@ void myHaarTraining(const char* dirname,
 	CvIntHaarFeatures* haar_features = NULL;
 	CvHaarTrainingData* training_data = NULL;           //记住要释放空间(已经释放)
 	int *predit_result = new int[sampleNumber]; //阶段预测
+	ofstream file;
+	ofstream filePic;
+	char fileName[100];
 	MySize winsize;
 	int *number_pos = new int[npos];  //正样本序号集合
 	int *number_neg = new int[nneg];  //负样本序号集合         已经释放空间
 	int current_stage = 0;
 	float hitRate_real = 0;
-	float maxFalse_real = 1;
+	float maxFalse_real = 0;
 	float negHit = 0;
 	winsize = mySize(winwidth, winheight);
 	haar_features = icvCreateIntHaarFeatures(winsize, mode, symmetric); // 计算haar特征个数
@@ -985,7 +1018,7 @@ void myHaarTraining(const char* dirname,
 	//读入图像
 	number_pos = getRand(number_pos,0, cvposdata->count - 1,npos);
 	number_neg = getRand(number_neg, 0, cvbgdata->count - 1, nneg);
-	
+	/*
 	for (int i = 0;i < npos;i++)
 	{
 		number_pos[i] = i;
@@ -994,7 +1027,10 @@ void myHaarTraining(const char* dirname,
 	{
 		number_neg[i] = i;
 	}
-	
+	*/
+
+	filePic.open("E://pic.txt", ios::out);
+	filePic.close();
 	//收集样本 级联要替换样本
 	trainingdata_number = 0;
 	getPicture(training_data, number_pos,npos,POS_FLAG,winsize);
@@ -1014,6 +1050,21 @@ void myHaarTraining(const char* dirname,
 			negHit++;
 	
 	}
+
+	sprintf(fileName, "%s//%d.txt", "c:",0);
+	//	file[j].open(fileName, ios::app);
+	//	file[j] << val << endl;
+	//	file[j].close();
+	file.open("E://result.txt", ios::out);
+	file.close();
+	
+	for (int i = 0;i < sampleNumber;i++)
+	{
+		file.open("E://result.txt", ios::app);
+		file <<i<<":"<<training_data->cls.data.fl[i]<<","<< predit_result[i]<<"," << endl;	
+		file.close();
+	}
+	
 	cout << "rightRate=" << (negHit + hitRate_real)/sampleNumber << endl;
 	hitRate_real = hitRate_real / npos;
 	maxFalse_real = maxFalse_real / nneg;
